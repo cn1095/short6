@@ -482,154 +482,145 @@ func (hs *HybridStorage) LoadStats() (Data, error) {
 // 全局存储实例
 var storage Storage
 
-// 同步数据（双向智能同步策略 + 同步后统计更新）
-func syncLocalToRedis() {  
-    if !redisEnabled {  
-        return  
-    }  
-  
-    log.Println("开始双向同步本地short_data与Redis的数据...")  
-  
-    fileStorage := NewFileStorage(dataDir)  
-    redisStorage := NewRedisStorage(redisPrefix)  
-  
-    // 1. 同步统计数据（已有双向同步逻辑）  
-    localStats, err := fileStorage.LoadStats()  
-    if err != nil {  
-        log.Printf("读取本地统计数据失败: %v", err)  
-    } else {  
-        redisStats, err := redisStorage.LoadStats()  
-        if err != nil {  
-            // Redis中没有统计数据，同步本地到Redis  
-            if err := redisStorage.SaveStats(localStats); err != nil {  
-                log.Printf("保存统计数据到Redis失败: %v", err)  
-            }  
-        } else {  
-            // 比较并同步统计数据  
-            localToRedis := localStats.TotalRules > redisStats.TotalRules || localStats.TotalVisits > redisStats.TotalVisits  
-            redisToLocal := redisStats.TotalRules > localStats.TotalRules || redisStats.TotalVisits > localStats.TotalVisits  
-  
-            if localToRedis {  
-                if err := redisStorage.SaveStats(localStats); err != nil {  
-                    log.Printf("保存统计数据到Redis失败: %v", err)  
-                }  
-            } else if redisToLocal {  
-                if err := fileStorage.SaveStats(redisStats); err != nil {  
-                    log.Printf("保存Redis统计数据到本地失败: %v", err)  
-                }  
-            }  
-        }  
-    }  
-  
-    // 2. 获取本地和Redis的所有规则  
-    localRules, err := fileStorage.ListRules()  
-    if err != nil {  
-        log.Printf("读取本地规则数据失败: %v", err)  
-        return  
-    }  
-  
-    redisRules, err := redisStorage.ListRules()  
-    if err != nil {  
-        log.Printf("读取Redis规则数据失败: %v", err)  
-        return  
-    }  
-  
-    // 3. 创建映射以便快速查找  
-    localRuleMap := make(map[string]ApiRequest)  
-    for _, rule := range localRules {  
-        localRuleMap[rule.ShortCode] = rule  
-    }  
-  
-    redisRuleMap := make(map[string]ApiRequest)  
-    for _, rule := range redisRules {  
-        redisRuleMap[rule.ShortCode] = rule  
-    }  
-  
-    syncCount := 0  
-    localToRedisCount := 0  
-    redisToLocalCount := 0  
-  
-    // 4. 处理本地规则同步到Redis  
-    for code, localRule := range localRuleMap {  
-        redisRule, existsInRedis := redisRuleMap[code]  
+// 同步数据（双向智能同步策略 + 同步后统计更新）  
+func syncLocalToRedis() {    
+    if !redisEnabled {    
+        return    
+    }    
+    
+    log.Println("开始双向同步本地short_data与Redis的数据...")    
+    
+    fileStorage := NewFileStorage(dataDir)    
+    redisStorage := NewRedisStorage(redisPrefix)    
+    
+    // 1. 同步统计数据（已有双向同步逻辑）    
+    localStats, err := fileStorage.LoadStats()    
+    if err != nil {    
+        log.Printf("读取本地统计数据失败: %v", err)    
+    } else {    
+        redisStats, err := redisStorage.LoadStats()    
+        if err != nil {    
+            // Redis中没有统计数据，同步本地到Redis    
+            if err := redisStorage.SaveStats(localStats); err != nil {    
+                log.Printf("保存统计数据到Redis失败: %v", err)    
+            }    
+        } else {    
+            // 比较并同步统计数据    
+            localToRedis := localStats.TotalRules > redisStats.TotalRules || localStats.TotalVisits > redisStats.TotalVisits    
+            redisToLocal := redisStats.TotalRules > localStats.TotalRules || redisStats.TotalVisits > localStats.TotalVisits    
+    
+            if localToRedis {    
+                if err := redisStorage.SaveStats(localStats); err != nil {    
+                    log.Printf("保存统计数据到Redis失败: %v", err)    
+                }    
+            } else if redisToLocal {    
+                if err := fileStorage.SaveStats(redisStats); err != nil {    
+                    log.Printf("保存Redis统计数据到本地失败: %v", err)    
+                }    
+            }    
+        }    
+    }    
+    
+    // 2. 获取本地和Redis的所有规则    
+    localRules, err := fileStorage.ListRules()    
+    if err != nil {    
+        log.Printf("读取本地规则数据失败: %v", err)    
+        return    
+    }    
+    
+    redisRules, err := redisStorage.ListRules()    
+    if err != nil {    
+        log.Printf("读取Redis规则数据失败: %v", err)    
+        return    
+    }    
+    
+    // 3. 创建映射以便快速查找    
+    localRuleMap := make(map[string]ApiRequest)    
+    for _, rule := range localRules {    
+        localRuleMap[rule.ShortCode] = rule    
+    }    
+    
+    redisRuleMap := make(map[string]ApiRequest)    
+    for _, rule := range redisRules {    
+        redisRuleMap[rule.ShortCode] = rule    
+    }    
+    
+    syncCount := 0    
+    localToRedisCount := 0    
+    redisToLocalCount := 0    
+    
+    // 4. 处理本地规则同步到Redis - 改为每次写入成功就计数    
+    for code, localRule := range localRuleMap {    
+        redisRule, existsInRedis := redisRuleMap[code]    
           
-        if !existsInRedis {  
-            // 本地有 → Redis没有：同步到Redis  
-            if err := redisStorage.SaveRule(code, localRule); err != nil {  
-                log.Printf("同步规则 %s 到Redis失败: %v", code, err)  
-            } else {  
-                localToRedisCount++  
-                // log.Printf("同步本地规则 %s 到Redis", code)  
-            }  
-        } else {  
-            // 本地有 → Redis有：比较更新时间，新的同步到旧的  
-            localTime, err1 := time.Parse("2006-01-02 15:04:05", localRule.LastUpdate)  
-            redisTime, err2 := time.Parse("2006-01-02 15:04:05", redisRule.LastUpdate)  
-  
-            if err1 != nil || err2 != nil {  
-                // 时间解析失败，默认使用本地规则  
-                if err := redisStorage.SaveRule(code, localRule); err != nil {  
-                    log.Printf("同步规则 %s 到Redis失败: %v", code, err)  
-                } else {  
-                    localToRedisCount++  
-                    // log.Printf("规则 %s 时间解析失败，使用本地版本同步到Redis", code)  
-                }  
-            } else if localTime.After(redisTime) {  
-                // 本地版本更新，同步到Redis  
-                if err := redisStorage.SaveRule(code, localRule); err != nil {  
-                    log.Printf("同步规则 %s 到Redis失败: %v", code, err)  
-                } else {  
-                    localToRedisCount++  
-                    // log.Printf("本地规则 %s 更新时间更新，同步到Redis", code)  
-                }  
-            }  
-        }  
-    }  
-  
-    // 5. 处理Redis规则同步到本地  
-    for code, redisRule := range redisRuleMap {  
-        _, existsInLocal := localRuleMap[code]  
+        shouldSync := false  
           
-        if !existsInLocal {  
-            // 本地没有 → Redis有：同步到本地  
-            if err := fileStorage.SaveRule(code, redisRule); err != nil {  
-                log.Printf("同步规则 %s 到本地失败: %v", code, err)  
-            } else {  
-                redisToLocalCount++  
-                // log.Printf("同步Redis规则 %s 到本地", code)  
-            }  
-        } else {  
-            // 本地有 → Redis有：比较更新时间，新的同步到旧的  
-            localRule := localRuleMap[code]  
-            localTime, err1 := time.Parse("2006-01-02 15:04:05", localRule.LastUpdate)  
-            redisTime, err2 := time.Parse("2006-01-02 15:04:05", redisRule.LastUpdate)  
-  
-            if err1 != nil || err2 != nil {  
-                // 时间解析失败，默认使用Redis规则  
-                if err := fileStorage.SaveRule(code, redisRule); err != nil {  
-                    log.Printf("同步规则 %s 到本地失败: %v", code, err)  
-                } else {  
-                    redisToLocalCount++  
-                    // log.Printf("规则 %s 时间解析失败，使用Redis版本同步到本地", code)  
-                }  
-            } else if redisTime.After(localTime) {  
-                // Redis版本更新，同步到本地  
-                if err := fileStorage.SaveRule(code, redisRule); err != nil {  
-                    log.Printf("同步规则 %s 到本地失败: %v", code, err)  
-                } else {  
-                    redisToLocalCount++  
-                    // log.Printf("Redis规则 %s 更新时间更新，同步到本地", code)  
-                }  
-            }  
-        }  
-    }  
-  
-    syncCount = localToRedisCount + redisToLocalCount  
-    log.Printf("双向数据同步完成: 本地→Redis %d 条，Redis→本地 %d 条，总计 %d 条", localToRedisCount, redisToLocalCount, syncCount)  
-  
-    // 6. 同步完成后重新统计并更新total_rules  
-    log.Println("开始重新统计并更新后缀已使用数量...")  
-    updateTotalRulesAfterSync()  
+        if !existsInRedis {    
+            // 本地有 → Redis没有：需要同步    
+            shouldSync = true  
+        } else {    
+            // 本地有 → Redis有：比较更新时间    
+            localTime, err1 := time.Parse("2006-01-02 15:04:05", localRule.LastUpdate)    
+            redisTime, err2 := time.Parse("2006-01-02 15:04:05", redisRule.LastUpdate)    
+    
+            if err1 != nil || err2 != nil {    
+                // 时间解析失败，默认同步    
+                shouldSync = true  
+            } else if localTime.After(redisTime) {    
+                // 本地版本更新，需要同步    
+                shouldSync = true  
+            }    
+        }    
+    
+        if shouldSync {    
+            if err := redisStorage.SaveRule(code, localRule); err != nil {    
+                log.Printf("同步规则 %s 到Redis失败: %v", code, err)    
+            } else {    
+                localToRedisCount++  // 每次写入成功就计数    
+                // log.Printf("同步本地规则 %s 到Redis成功", code)    
+            }    
+        }    
+    }    
+    
+    // 5. 处理Redis规则同步到本地 - 改为每次写入成功就计数    
+    for code, redisRule := range redisRuleMap {    
+        localRule, existsInLocal := localRuleMap[code]    
+          
+        shouldSync := false  
+          
+        if !existsInLocal {    
+            // 本地没有 → Redis有：需要同步    
+            shouldSync = true  
+        } else {    
+            // 本地有 → Redis有：比较更新时间    
+            localTime, err1 := time.Parse("2006-01-02 15:04:05", localRule.LastUpdate)    
+            redisTime, err2 := time.Parse("2006-01-02 15:04:05", redisRule.LastUpdate)    
+    
+            if err1 != nil || err2 != nil {    
+                // 时间解析失败，默认同步    
+                shouldSync = true  
+            } else if redisTime.After(localTime) {    
+                // Redis版本更新，需要同步    
+                shouldSync = true  
+            }    
+        }    
+    
+        if shouldSync {    
+            if err := fileStorage.SaveRule(code, redisRule); err != nil {    
+                log.Printf("同步规则 %s 到本地失败: %v", code, err)    
+            } else {    
+                redisToLocalCount++  // 每次写入成功就计数    
+                // log.Printf("同步Redis规则 %s 到本地成功", code)    
+            }    
+        }    
+    }    
+    
+    syncCount = localToRedisCount + redisToLocalCount    
+    log.Printf("双向数据同步完成: 本地→Redis %d 条，Redis→本地 %d 条，总计 %d 条", localToRedisCount, redisToLocalCount, syncCount)    
+    
+    // 6. 同步完成后重新统计并更新total_rules    
+    log.Println("开始重新统计并更新后缀已使用数量...")    
+    updateTotalRulesAfterSync()    
 }
 
 // 定期检查Redis连接并重连
@@ -2942,6 +2933,8 @@ func main() {
 		fmt.Println("Go Version:", runtime.Version())
 		return
 	}
+	// 初始化Redis连接
+	redisConnected := initRedis(redisAddrFlag, redisUsernameFlag, redisPasswordFlag, redisPrefixFlag)
 
 	if daemon {
 		runAsDaemon()
@@ -2990,8 +2983,6 @@ func main() {
 			log.Fatalf("无法创建数据目录: %v", err)
 		}
 	}
-	// 初始化Redis连接
-	redisConnected := initRedis(redisAddrFlag, redisUsernameFlag, redisPasswordFlag, redisPrefixFlag)
 
 	// 初始化存储层
 	fileStorage := NewFileStorage(dataDir)
