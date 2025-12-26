@@ -1596,142 +1596,113 @@ func isAuthenticated(r *http.Request) bool {
 	return ip == ipCookie.Value
 }
 
-// 处理/admin请求
-func adminHandler(w http.ResponseWriter, r *http.Request, dataDir string) {
-
-	// 检查锁定状态
-	lockoutData.RLock()
-	defer lockoutData.RUnlock()
-	if time.Now().Before(lockoutData.lockout) {
-		http.Error(w, "错误：连续输错次数太多啦，请休息一会儿后再试吧！", http.StatusForbidden)
-		return
-	}
-	//处理清理日志请求
-	      if r.Method == http.MethodPost && r.FormValue("mode") == "del-log" {
-	         if logDir != "" {
-			logFile := fmt.Sprintf("%s/shortener.log", logDir)
-			err := os.Truncate(logFile, 0)
-			if err != nil {
-				http.Error(w, "错误：无法清空日志", http.StatusInternalServerError)
-				return
-			}
-			fmt.Fprintln(w, "清空日志成功")
-		} else {
-			http.Error(w, "错误：日志目录未指定", http.StatusInternalServerError)
-		}
-	}
-	
-	// 处理删除请求
-	if r.Method == http.MethodPost && r.FormValue("mode") == "delete" {
-		shortCode := r.FormValue("shortcode")
-		if shortCode == "" {
-			http.Error(w, "错误：缺少必要的参数", http.StatusBadRequest)
-			return
-		}
-
-		// 构建要删除的文件路径
-		filePath := filepath.Join(dataDir, shortCode+".json")
-
-		// 删除文件
-		err := os.Remove(filePath)
-		if err != nil {
-			log.Printf("删除%s失败 : %v", filePath, err)
-			http.Error(w, "删除失败", http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("删除成功"))
-		return
-	}
-	
-		// 处理编辑请求
-	        if r.Method == http.MethodPost && r.FormValue("mode") == "edit" {
-		var data ApiRequest
-		decoder := json.NewDecoder(r.Body)
-		err := decoder.Decode(&data)
-		if err != nil {
-			http.Error(w, "错误：无效的请求数据", http.StatusBadRequest)
-			return
-		}
-
-		// 使用 ShortCode 作为文件名
-		shortCode := data.ShortCode
-		if shortCode == "" {
-			http.Error(w, "错误：缺少 ShortCode", http.StatusBadRequest)
-			return
-		}
-		// 判断 ShortCode 是否为单个 "/" 或包含 "/"
-    		if shortCode == "/" || strings.Contains(shortCode, "/") {
-        		http.Error(w, "错误：后缀里不能包含 / 符号", http.StatusBadRequest)
-        		return
-    		}
-		// 构建要更新的文件路径
-		filePath := filepath.Join(dataDir, shortCode+".json")
-
-		// 读取文件内容
-		_, err = os.Stat(filePath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				http.Error(w, "错误：文件不存在", http.StatusNotFound)
-				return
-			}
-			http.Error(w, "错误：无法读取文件", http.StatusInternalServerError)
-			return
-		}
-
-		// 写入新数据到文件
-		fileContent, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			http.Error(w, "错误：无法序列化数据", http.StatusInternalServerError)
-			return
-		}
-
-		err = os.WriteFile(filePath, fileContent, 0644)
-		if err != nil {
-			http.Error(w, "错误：无法写入文件", http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("修改成功"))
-		return
-	}
-	// 读取dataDir目录中的所有.json文件（不包括short_data.json）
-	files, err := filepath.Glob(filepath.Join(dataDir, "*.json"))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("无法读取数据目录：%v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// 定义结构用于保存所有文件的数据
-	var allData []ApiRequest
-
-	// 读取每个JSON文件的内容
-	for _, file := range files {
-		if filepath.Base(file) == "short_data.json" {
-			continue
-		}
-
-		// 读取JSON文件内容
-		content, err := os.ReadFile(file)
-		if err != nil {
-			log.Printf("无法读取文件 %s: %v", file, err)
-			continue
-		}
-
-		var data ApiRequest
-		if err := json.Unmarshal(content, &data); err != nil {
-			log.Printf("无法解析文件 %s: %v", file, err)
-			continue
-		}
-
-		allData = append(allData, data)
-	}
-
-	// 生成HTML响应
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	renderAdminPage(w, r, allData)
+// 处理/admin请求 
+func adminHandler(w http.ResponseWriter, r *http.Request, dataDir string) {  
+    // 检查锁定状态  
+    lockoutData.RLock()  
+    defer lockoutData.RUnlock()  
+    if time.Now().Before(lockoutData.lockout) {  
+        http.Error(w, "错误：连续输错次数太多啦，请休息一会儿后再试吧！", http.StatusForbidden)  
+        return  
+    }  
+  
+    // 处理清理日志请求  
+    if r.Method == http.MethodPost && r.FormValue("mode") == "del-log" {  
+        if logDir != "" {  
+            logFile := fmt.Sprintf("%s/shortener.log", logDir)  
+            err := os.Truncate(logFile, 0)  
+            if err != nil {  
+                http.Error(w, "错误：无法清空日志", http.StatusInternalServerError)  
+                return  
+            }  
+            fmt.Fprintln(w, "清空日志成功")  
+        } else {  
+            http.Error(w, "错误：日志目录未指定", http.StatusInternalServerError)  
+        }  
+    }  
+  
+    // 处理删除请求 - 使用混合存储优先删除Redis  
+    if r.Method == http.MethodPost && r.FormValue("mode") == "delete" {  
+        shortCode := r.FormValue("shortcode")  
+        if shortCode == "" {  
+            http.Error(w, "错误：缺少必要的参数", http.StatusBadRequest)  
+            return  
+        }  
+  
+        // 使用混合存储删除（优先Redis，失败时回退到本地文件）  
+        err := storage.DeleteRule(shortCode)  
+        if err != nil {  
+            log.Printf("删除规则 %s 失败: %v", shortCode, err)  
+            http.Error(w, "删除失败", http.StatusInternalServerError)  
+            return  
+        }  
+  
+        w.WriteHeader(http.StatusOK)  
+        w.Write([]byte("删除成功"))  
+        return  
+    }  
+  
+    // 处理编辑请求 - 使用混合存储优先保存到Redis  
+    if r.Method == http.MethodPost && r.FormValue("mode") == "edit" {  
+        var data ApiRequest  
+        decoder := json.NewDecoder(r.Body)  
+        err := decoder.Decode(&data)  
+        if err != nil {  
+            http.Error(w, "错误：无效的请求数据", http.StatusBadRequest)  
+            return  
+        }  
+  
+        // 使用 ShortCode 作为文件名  
+        shortCode := data.ShortCode  
+        if shortCode == "" {  
+            http.Error(w, "错误：缺少 ShortCode", http.StatusBadRequest)  
+            return  
+        }  
+          
+        // 判断 ShortCode 是否为单个 "/" 或包含 "/"  
+        if shortCode == "/" || strings.Contains(shortCode, "/") {  
+            http.Error(w, "错误：后缀里不能包含 / 符号", http.StatusBadRequest)  
+            return  
+        }  
+  
+        // 检查规则是否存在  
+        _, found, err := storage.LoadRule(shortCode)  
+        if err != nil {  
+            http.Error(w, "错误：无法读取规则", http.StatusInternalServerError)  
+            return  
+        }  
+        if !found {  
+            http.Error(w, "错误：规则不存在", http.StatusNotFound)  
+            return  
+        }  
+  
+        // 设置更新时间  
+        loc := time.FixedZone("CST", 8*60*60)  
+        data.LastUpdate = time.Now().In(loc).Format("2006-01-02 15:04:05")  
+  
+        // 使用混合存储保存（优先Redis，失败时回退到本地文件）  
+        err = storage.SaveRule(shortCode, data)  
+        if err != nil {  
+            log.Printf("保存规则 %s 失败: %v", shortCode, err)  
+            http.Error(w, "错误：无法保存规则", http.StatusInternalServerError)  
+            return  
+        }  
+  
+        w.WriteHeader(http.StatusOK)  
+        w.Write([]byte("修改成功"))  
+        return  
+    }  
+  
+    // 使用混合存储优先读取Redis数据  
+    allData, err := storage.ListRules()  
+    if err != nil {  
+        http.Error(w, fmt.Sprintf("无法读取规则数据：%v", err), http.StatusInternalServerError)  
+        return  
+    }  
+  
+    // 生成HTML响应  
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")  
+    renderAdminPage(w, r, allData)  
 }
 
 func getHost(r *http.Request) string {  
