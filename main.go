@@ -2281,24 +2281,27 @@ td:first-child {
     position: fixed;  
     bottom: 30px;  
     right: 30px;  
-    width: 70px;  
-    height: 70px;  
+    /* 移除固定宽高，让背景刚好包裹文字 */  
+    padding: 12px 20px;  /* 用padding控制大小 */  
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  
     color: white;  
     border: none;  
-    border-radius: 50%;  
+    border-radius: 25px;  /* 圆角按钮 */  
     cursor: pointer;  
     display: none;  
     align-items: center;  
     justify-content: center;  
-    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);  
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);  
     transition: all 0.3s ease;  
     z-index: 1000;  
+    font-size: 16px;  /* 增大文字 */  
+    font-weight: 600;  /* 加粗 */  
+    white-space: nowrap;  /* 防止文字换行 */  
 }  
   
 .back-to-top-btn:hover {  
-    transform: translateY(-4px);  
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);  
+    transform: translateY(-2px);  
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);  
 }  
   
 .back-to-top-btn.show {  
@@ -3095,9 +3098,7 @@ function scrollToTop() {
 </div>
 <!-- 悬浮回到顶部按钮 -->  
 <button id="backToTop" class="back-to-top-btn" onclick="scrollToTop()">  
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="none">  
-        <path d="M7 14l5-5 5 5z"/>  
-    </svg>  
+    顶部  
 </button>
 	<!-- 加载弹窗 -->  
 <div id="loadingPopup" class="loading-popup">  
