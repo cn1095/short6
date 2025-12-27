@@ -2131,6 +2131,8 @@ func renderAdminPage(w http.ResponseWriter, r *http.Request, data []ApiRequest) 
 			function deleteRow(shortcode) {
 				if (confirm("确定要删除此项吗？")) {
 					showLoading();
+					var deleteBtn = event.target;  
+        			var row = deleteBtn.closest('tr');
 					var xhr = new XMLHttpRequest();
 					xhr.open("POST", "/admin?mode=delete", true);
 					xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -2140,7 +2142,11 @@ func renderAdminPage(w http.ResponseWriter, r *http.Request, data []ApiRequest) 
 						hideLoading();
 						if (xhr.status === 200) {
 						   if (xhr.responseText.includes('删除成功')) {
-						   	  row.remove();
+						   	  // 成功：移除行并更新统计  
+                    		  row.style.display = 'none'; // 先隐藏  
+                    		  setTimeout(function() {  
+                        			row.remove(); // 然后移除  
+                    		  }, 100);
 						      alert('删除成功');
 						   } else {
 						      alert('删除失败');
