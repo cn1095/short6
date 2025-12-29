@@ -541,8 +541,7 @@ func syncLocalToRedis() {
             } else if redisToLocal {    
                 if err := fileStorage.SaveStats(redisStats); err != nil {    
                     log.Printf("保存Redis统计数据到本地失败: %v", err)    
-                }
-				else {  
+                } else {  
                 	log.Printf("成功同步Redis统计数据到本地: 后缀已使用TotalRules=%d, 总转址数TotalVisits=%d", redisStats.TotalRules, redisStats.TotalVisits)  
             	}
             }    
