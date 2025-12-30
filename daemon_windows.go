@@ -9,7 +9,8 @@ import (
 )  
   
 func runAsDaemonWindows() {  
-    cmd := exec.Command(os.Args[0], os.Args[1:]...)  
+    cmd := exec.Command(os.Args[0], os.Args[1:]...) 
+    cmd.Env = os.Environ()
     err := cmd.Start()  
     if err != nil {  
         log.Fatalf("后台运行失败: %v", err)  
