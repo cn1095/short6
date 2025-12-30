@@ -1,7 +1,11 @@
 //go:build !windows  
 // +build !windows  
   
-package main  
+package main
+
+import (  
+    "fmt"  
+)
   
 func printHelp() {  
     colorText := func(color int, message string) string {  
